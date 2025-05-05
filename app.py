@@ -48,17 +48,17 @@ def robot_decision_making(image, detections, robot_state):
     img = np.array(image.copy())
     height, width = img.shape[:2]
     
-    # Robot parameters
+    
     robot_radius = 20
     robot_position = robot_state.get('position', (width // 4, height // 2))
     robot_target = robot_state.get('target', None)
     robot_speed = robot_state.get('speed', 5)
     
-    # Define approach and avoid criteria
-    approach_criteria = robot_state.get('approach_criteria', 'tallest')  # Options: tallest, nearest, center
-    avoid_threshold = robot_state.get('avoid_threshold', 0.7)  # Confidence threshold for avoidance
     
-    # Extract person boxes
+    approach_criteria = robot_state.get('approach_criteria', 'tallest')  
+    avoid_threshold = robot_state.get('avoid_threshold', 0.7)  
+    
+    
     person_boxes = []
     for _, detection in detections.iterrows():
         x1, y1, x2, y2 = int(detection['xmin']), int(detection['ymin']), int(detection['xmax']), int(detection['ymax'])
@@ -77,15 +77,14 @@ def robot_decision_making(image, detections, robot_state):
             'area': area,
             'distance': distance,
             'height': height_person,
-            'decision': 'neutral'  # Default decision
+            'decision': 'neutral'  
         })
     
-    # Make decisions for each person
+    
     targets_to_approach = []
     targets_to_avoid = []
     
     for person in person_boxes:
-        # Determine if the person should be avoided based on confidence
         if person['confidence'] > avoid_threshold:
             person['decision'] = 'avoid'
             targets_to_avoid.append(person)
@@ -93,7 +92,6 @@ def robot_decision_making(image, detections, robot_state):
             person['decision'] = 'approach'
             targets_to_approach.append(person)
     
-    # Determine the primary target to approach
     target_to_approach = None
     if targets_to_approach:
         if approach_criteria == 'tallest':
@@ -101,35 +99,32 @@ def robot_decision_making(image, detections, robot_state):
         elif approach_criteria == 'nearest':
             target_to_approach = min(targets_to_approach, key=lambda x: x['distance'])
         elif approach_criteria == 'center':
-            # Find the person closest to image center
             image_center = (width // 2, height // 2)
             for person in targets_to_approach:
                 person['center_distance'] = compute_target_distance(image_center, person['center'])
             target_to_approach = min(targets_to_approach, key=lambda x: x['center_distance'])
     
-    # Update robot target
+    
     if target_to_approach:
         robot_target = target_to_approach['center']
         robot_state['target'] = robot_target
     
-    # Move robot towards target (simple direct movement)
+    
     if robot_target:
         dx = robot_target[0] - robot_position[0]
         dy = robot_target[1] - robot_position[1]
         distance = np.sqrt(dx**2 + dy**2)
         
         if distance > robot_speed:
-            # Normalize direction vector and multiply by speed
             dx = dx / distance * robot_speed
             dy = dy / distance * robot_speed
             
-            # Check if the new position would collide with any person to avoid
             new_position = (int(robot_position[0] + dx), int(robot_position[1] + dy))
             collision = False
             
             for person in targets_to_avoid:
                 x1, y1, x2, y2 = person['bbox']
-                # Add padding around the person
+                
                 padding = robot_radius + 10
                 if (new_position[0] >= (x1 - padding) and new_position[0] <= (x2 + padding) and
                     new_position[1] >= (y1 - padding) and new_position[1] <= (y2 + padding)):
@@ -140,12 +135,11 @@ def robot_decision_making(image, detections, robot_state):
                 robot_position = new_position
                 robot_state['position'] = robot_position
     
-    # Draw all person boxes with decision colors
     for person in person_boxes:
         x1, y1, x2, y2 = person['bbox']
         conf = person['confidence']
         
-        # Color based on decision
+        
         if person['decision'] == 'approach':
             color = (0, 255, 0)  # Green for approach
             label = f"Approach: {conf:.2f}"
@@ -156,19 +150,19 @@ def robot_decision_making(image, detections, robot_state):
         cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
         cv2.putText(img, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
     
-    # Draw robot
-    cv2.circle(img, robot_position, robot_radius, (0, 0, 255), -1)  # Robot body
     
-    # Draw target line if target exists
+    cv2.circle(img, robot_position, robot_radius, (0, 0, 255), -1)  
+    
+    
     if robot_target:
         cv2.line(img, robot_position, robot_target, (255, 255, 0), 2)
         cv2.circle(img, robot_target, 5, (255, 255, 0), -1)
     
-    # Add decision explanation text
+    
     cv2.putText(img, f"Approach strategy: {approach_criteria}", (10, 30), 
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
-    # Display the number of people to approach/avoid
+    
     cv2.putText(img, f"Approach: {len(targets_to_approach)}, Avoid: {len(targets_to_avoid)}", 
                 (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     
@@ -218,7 +212,7 @@ def process_webcam(model, confidence_threshold, stop_button, robot_state):
         start_time = time.time()
         detections, rendered_img = detect_humans(frame_rgb, model, confidence_threshold)
         
-        # Apply robotics decision making
+        
         robotics_img, robot_state = robot_decision_making(rendered_img, detections, robot_state)
         
         current_time = time.time()
@@ -248,7 +242,7 @@ def process_webcam(model, confidence_threshold, stop_button, robot_state):
             with col4:
                 st.metric("Robot Status", "Active" if robot_state['target'] else "Idle")
         
-        # Robot decision details
+        
         with decision_placeholder.container():
             st.subheader("Robot Decision Making")
             col1, col2 = st.columns(2)
@@ -276,7 +270,7 @@ def process_webcam(model, confidence_threshold, stop_button, robot_state):
                 
                 display_data = detections.copy()
                 
-                # Add decision column
+                
                 display_data['decision'] = ['Avoid' if conf > robot_state['avoid_threshold'] else 'Approach' 
                                          for conf in display_data['confidence']]
                 
@@ -291,7 +285,7 @@ def process_webcam(model, confidence_threshold, stop_button, robot_state):
     cap.release()
 
 def main():
-    # Custom CSS for styling
+    
     st.markdown("""
     <style>
     .main-header {
@@ -336,11 +330,11 @@ def main():
     st.markdown('<h1 class="main-header">Human Detection System</h1>', unsafe_allow_html=True)
     st.markdown('<h2 class="sub-header">Powered by YOLOv5 with Robotics Integration</h2>', unsafe_allow_html=True)
     
-    # Sidebar settings
+    
     st.sidebar.title("Settings")
     confidence_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.5, 0.05)
     
-    # Robotics decision-making settings
+    
     st.sidebar.title("Robot Settings")
     approach_criteria = st.sidebar.selectbox(
         "Approach Strategy",
@@ -354,9 +348,9 @@ def main():
         help="Confidence threshold above which the robot will avoid a person"
     )
     
-    # Initialize robot state
+    
     robot_state = {
-        'position': None,  # Will be set based on image dimensions
+        'position': None,  
         'target': None,
         'speed': 5,
         'approach_criteria': approach_criteria,
@@ -378,12 +372,12 @@ def main():
     - **Robot Logic**: Smart decision-making based on confidence levels
     """)
     
-    # Load model
+    
     with st.spinner("Loading YOLOv5 model..."):
         model = load_model()
         st.success("Model loaded successfully!")
     
-    # Create tabs
+    
     tab1, tab2 = st.tabs(["📷 Webcam Detection", "🖼️ Image Upload"])
     
     with tab1:
@@ -400,20 +394,20 @@ def main():
         with col2:
             st.warning("Robot will avoid humans with higher confidence scores")
             
-        # Start button
+        
         start_webcam = st.button("Start Webcam")
         
         if start_webcam:
-            # Initialize robot position for webcam
+            
             if robot_state['position'] is None:
-                # We'll set this later when we get the first frame
+                
                 robot_state['position'] = (100, 100)
                 
             stop_webcam = st.button("Stop Webcam")
             
             process_webcam(model, confidence_threshold, stop_webcam, robot_state)
             
-    # Image Upload Tab
+    
     with tab2:
         st.markdown('<div class="info-box">', unsafe_allow_html=True)
         st.subheader("Upload Image")
@@ -421,47 +415,44 @@ def main():
         st.markdown('</div>', unsafe_allow_html=True)
         
         if uploaded_file is not None:
-            # Load image
+            
             image = Image.open(uploaded_file).convert("RGB")
             
-            # Reset robot state for new image
+            
             height, width = np.array(image).shape[:2]
-            robot_state['position'] = (width // 4, height // 2)  # Start from left side
+            robot_state['position'] = (width // 4, height // 2) 
             robot_state['target'] = None
             
-            # Original and detection columns
             col1, col2 = st.columns(2)
             
             with col1:
                 st.subheader("Original Image")
                 st.image(image, caption="Uploaded Image", use_container_width=True)
             
-            # Process image
             with st.spinner("Detecting humans..."):
                 progress_bar = st.progress(0)
                 
-                # Simulate progress
+                
                 for percent_complete in range(0, 101, 10):
                     time.sleep(0.1)
                     progress_bar.progress(percent_complete / 100)
                 
-                # Actual detection
                 start_time = time.time()
                 detections, rendered_img = detect_humans(image, model, confidence_threshold)
                 
-                # Apply robotics decision making
+               
                 robotics_img, robot_state = robot_decision_making(rendered_img, detections, robot_state)
                 
                 end_time = time.time()
                 
                 progress_bar.progress(1.0)
             
-            # Display result
+            
             with col2:
                 st.subheader("Robotics Decision Result")
                 st.image(robotics_img, caption="Robot Decision Making", use_container_width=True)
             
-            # Statistics
+            
             st.markdown("---")
             st.subheader("Detection Statistics")
             
@@ -482,7 +473,7 @@ def main():
                 avoid_count = len(detections) - approach_count
                 st.metric("Humans to Avoid", avoid_count)
             
-            # Robot decision explanation
+            
             st.markdown("---")
             st.subheader("Robot Decision Explanation")
             
@@ -499,25 +490,25 @@ def main():
                 if robot_state['target']:
                     st.write(f"Current target position: ({robot_state['target'][0]}, {robot_state['target'][1]})")
             
-            # Detection details
+            
             if not detections.empty:
                 st.markdown("---")
                 st.subheader("Detection Details")
                 
-                # Prepare data for display
+                
                 display_data = detections.copy()
                 
-                # Add decision column
+               
                 display_data['decision'] = ['Avoid' if conf > robot_state['avoid_threshold'] else 'Approach' 
                                          for conf in display_data['confidence']]
                 
-                # Format numbers
+                
                 for col in ['xmin', 'ymin', 'xmax', 'ymax']:
                     display_data[col] = display_data[col].round(2)
                 
                 display_data['confidence'] = (display_data['confidence'] * 100).round(2).astype(str) + '%'
                 
-                # Display data
+                
                 st.dataframe(display_data[['name', 'confidence', 'decision', 'xmin', 'ymin', 'xmax', 'ymax']])
             
             else:
